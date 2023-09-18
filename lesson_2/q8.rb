@@ -5,7 +5,7 @@ VOWELS = 'aeiouAEIOU'.freeze
 
 hsh.each do |_, words|
   words.each do |word|
-    word.each_char do |char|
+    word.chars.each do |char|
       puts char if VOWELS.include?(char)
     end
   end
