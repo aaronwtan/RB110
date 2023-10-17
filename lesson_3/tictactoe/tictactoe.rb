@@ -1,7 +1,12 @@
 require 'yaml'
+require 'pry'
 
 MESSAGES = YAML.load_file('tictactoe.yml')
 PRELOADING_MESSAGE_KEYS = Array.new(9) { |i| "loading#{i}" }
+
+DEFAULT_SETTINGS = { players: ['Player', 'Computer'],
+                     first_player: :player1,
+                     final_win_condition: 5 }
 
 COMPUTER_PLAYERS = ['computer', 'computer 1', 'computer 2']
 
@@ -110,7 +115,40 @@ def format_footer(length)
   '-' * length
 end
 
-# player name methods
+# game and settings methods
+def play_game(settings)
+  players = settings[:players]
+  first_player = settings[:first_player]
+  scoreboard = initialize_scoreboard(players, settings[:final_win_condition])
+
+  ask_rules
+  ask_player_ready
+
+  # round loop
+  loop do
+    play_round(first_player, scoreboard)
+
+    break if final_winner?(scoreboard)
+
+    first_player = alternate_player(first_player)
+    update_round!(scoreboard)
+  end
+
+  display_final_result(scoreboard)
+end
+
+def configure_settings(default: false)
+  return DEFAULT_SETTINGS if default
+
+  players = initialize_players
+  first_player = ask_first_player(players)
+  final_win_condition = ask_final_win_condition
+
+  { players: players,
+    first_player: first_player,
+    final_win_condition: final_win_condition }
+end
+
 def initialize_players
   player1 = ask_player(1)
   display_greeting(player1, 1)
@@ -251,7 +289,33 @@ def display_current_player(current_player, scoreboard)
   prompt "It's #{scoreboard[current_player][:name]}'s turn."
 end
 
-# score and game board methods
+# round methods
+def play_round(first_player, scoreboard)
+  current_player = first_player
+  board = initialize_board
+
+  loop do
+    display_game(scoreboard, board)
+    display_current_player(current_player, scoreboard)
+    place_piece!(board, current_player, scoreboard)
+
+    if board[:help]
+      display_rules
+      ask_player_ready
+      toggle_help!(board)
+      next
+    end
+
+    break if round_winner?(board) || board_full?(board)
+
+    current_player = alternate_player(current_player)
+  end
+
+  update_score!(scoreboard, board)
+  display_game(scoreboard, board)
+  display_round_result(scoreboard, board)
+end
+
 def display_game(scoreboard, brd)
   system 'clear'
   display_title
@@ -264,11 +328,11 @@ def display_game(scoreboard, brd)
   display_board(brd)
 end
 
-def initialize_scoreboard(players)
+def initialize_scoreboard(players, final_win_condition)
   { player1: { name: players.first, marker: PLAYER1_MARKER, score: 0 },
     player2: { name: players.last, marker: PLAYER2_MARKER, score: 0 },
     round: 1,
-    final_win_condition: ask_final_win_condition }
+    final_win_condition: final_win_condition }
 end
 
 def ask_final_win_condition
@@ -347,32 +411,6 @@ def update_score!(scoreboard, brd)
 end
 
 # turn gameplay methods
-def play_round(first_player, scoreboard)
-  current_player = first_player
-  board = initialize_board
-
-  loop do
-    display_game(scoreboard, board)
-    display_current_player(current_player, scoreboard)
-    place_piece!(board, current_player, scoreboard)
-
-    if board[:help]
-      display_rules
-      ask_player_ready
-      toggle_help!(board)
-      next
-    end
-
-    break if round_winner?(board) || board_full?(board)
-
-    current_player = alternate_player(current_player)
-  end
-
-  update_score!(scoreboard, board)
-  display_game(scoreboard, board)
-  display_round_result(scoreboard, board)
-end
-
 def alternate_player(current_player)
   current_player == :player1 ? :player2 : :player1
 end
@@ -534,25 +572,8 @@ end
 
 # main game loop
 loop do
-  settings = configure_settings
-  players = initialize_players
-  scoreboard = initialize_scoreboard(players)
-  first_player = ask_first_player(players)
-  ask_rules
-  ask_player_ready
-
+  settings = configure_settings(default: true)
   play_game(settings)
-  # round loop
-  loop do
-    play_round(first_player, scoreboard)
-
-    break if final_winner?(scoreboard)
-
-    first_player = alternate_player(first_player)
-    update_round!(scoreboard)
-  end
-
-  display_final_result(scoreboard)
 
   break unless play_again?
 end
