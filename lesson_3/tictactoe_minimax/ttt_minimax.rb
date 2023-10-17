@@ -1,7 +1,8 @@
 require 'yaml'
 
-MESSAGES = YAML.load_file('tictactoe.yml')
-PRELOADING_MESSAGE_KEYS = Array.new(9) { |i| "loading#{i}" }
+MESSAGES = YAML.load_file('ttt_minimax.yml')
+PRELOADING_MESSAGES = %w(loading1 loading2 loading3 loading4 loading5
+                         loading6 loading7 loading8 loading9)
 
 COMPUTER_PLAYERS = ['computer', 'computer 1', 'computer 2']
 
@@ -50,7 +51,6 @@ def display_welcome
   title = 'Welcome to TIC-TAC-TOE!'
   display_title(title)
   sleep(2)
-  display_preloading_sequence
 end
 
 def display_title(title="TIC-TAC-TOE")
@@ -74,7 +74,7 @@ def display_preloading_sequence
 
     case num
     when 1..4
-      display_computer_loading(MESSAGES[PRELOADING_MESSAGE_KEYS.sample], 0.4)
+      display_computer_loading(MESSAGES[PRELOADING_MESSAGES.sample], 0.4)
     when 5
       # slow down before loading completion for dramatic effect
       display_computer_loading(MESSAGES['get_ready'], 1)
@@ -111,14 +111,17 @@ def format_footer(length)
 end
 
 # player name methods
-def initialize_players
+def initialize_players_and_markers
   player1 = ask_player(1)
   display_greeting(player1, 1)
   player2 = ask_player(2)
   display_greeting(player2, 2)
   update_duplicate_names!(player1, player2)
 
-  [player1, player2]
+  players = [player1, player2]
+  markers = { player1 => PLAYER1_MARKER, player2 => PLAYER2_MARKER }
+
+  [players, markers]
 end
 
 def display_greeting(player, player_number)
@@ -139,7 +142,7 @@ def ask_player(player_number)
     prompt "Player #{player_number} will play as #{PLAYER2_MARKER}."
   end
 
-  prompt "Is player #{player_number} a human or computer? (h/c)"
+  prompt "Is player #{player_number} a human or computer?"
   human? ? ask_name : 'Computer'
 end
 
@@ -161,9 +164,7 @@ end
 def human?
   loop do
     answer = gets.chomp.downcase
-    if ['h', 'c', 'human', 'computer'].include?(answer)
-      return ['h', 'human'].include?(answer)
-    end
+    return answer == 'human' if ['human', 'computer'].include?(answer)
 
     prompt 'invalid_human_or_computer'
   end
@@ -193,23 +194,21 @@ def ask_first_player(players)
 end
 
 def determine_first_player(first_player_choice, players)
+  first_player = ''
+
   if players.include?(first_player_choice)
     first_player = first_player_choice
     prompt "You chose #{first_player} to go first! " \
            "Player who goes first will alternate between rounds."
+    sleep(3)
   elsif first_player_choice.empty?
     first_player = players.sample
     prompt "Computer chose #{first_player} to go first! " \
            "Player who goes first will alternate between rounds."
+    sleep(3)
   end
 
-  sleep(3)
-
-  case first_player
-  when players.first then :player1
-  when players.last  then :player2
-  else                    first_player
-  end
+  first_player
 end
 
 def display_rules(rules='y')
@@ -247,8 +246,8 @@ def ask_player_ready
   gets
 end
 
-def display_current_player(current_player, scoreboard)
-  prompt "It's #{scoreboard[current_player][:name]}'s turn."
+def display_current_player(current_player)
+  prompt "It's #{current_player}'s turn."
 end
 
 # score and game board methods
@@ -265,9 +264,9 @@ def display_game(scoreboard, brd)
 end
 
 def initialize_scoreboard(players)
-  { player1: { name: players.first, marker: PLAYER1_MARKER, score: 0 },
-    player2: { name: players.last, marker: PLAYER2_MARKER, score: 0 },
-    round: 1,
+  { round: 1,
+    player1: { name: players.first, score: 0 },
+    player2: { name: players.last, score: 0 },
     final_win_condition: ask_final_win_condition }
 end
 
@@ -282,7 +281,7 @@ def ask_final_win_condition
       prompt 'default_win_condition'
       sleep(2)
       return 5
-    elsif valid_number_string?(final_win_condition, '+')
+    elsif valid_positive_number?(final_win_condition)
       prompt "The first player to #{final_win_condition} will win the game."
       sleep(2)
       return final_win_condition.to_i
@@ -292,12 +291,8 @@ def ask_final_win_condition
   end
 end
 
-def valid_number_string?(number_str, sign=nil)
-  case sign
-  when '+' then number_str =~ /^\d+$/ && number_str.to_i.positive?
-  when '-' then number_str =~ /^\d+$/ && number_str.to_i.negative?
-  else          number_str =~ /^\d+$/
-  end
+def valid_positive_number?(number_str)
+  number_str =~ /^\d+$/ && number_str.to_i.positive?
 end
 
 def display_scoreboard(scoreboard)
@@ -347,55 +342,29 @@ def update_score!(scoreboard, brd)
 end
 
 # turn gameplay methods
-def play_round(first_player, scoreboard)
-  current_player = first_player
-  board = initialize_board
-
-  loop do
-    display_game(scoreboard, board)
-    display_current_player(current_player, scoreboard)
-    place_piece!(board, current_player, scoreboard)
-
-    if board[:help]
-      display_rules
-      ask_player_ready
-      toggle_help!(board)
-      next
-    end
-
-    break if round_winner?(board) || board_full?(board)
-
-    current_player = alternate_player(current_player)
-  end
-
-  update_score!(scoreboard, board)
-  display_game(scoreboard, board)
-  display_round_result(scoreboard, board)
-end
-
-def alternate_player(current_player)
-  current_player == :player1 ? :player2 : :player1
+def alternate_player(current_player, players)
+  current_player == players.first ? players.last : players.first
 end
 
 def empty_squares(brd)
   brd.keys.select { |num| brd[num] == EMPTY_MARKER }
 end
 
-def place_piece!(brd, current_player, scoreboard)
-  if COMPUTER_PLAYERS.include?(scoreboard[current_player][:name].downcase)
-    computer_places_piece!(brd, current_player, scoreboard)
+def place_piece!(brd, current_player, player_markers)
+  if COMPUTER_PLAYERS.include?(current_player.downcase)
+    computer_places_piece!(brd, current_player, player_markers)
   else
-    player_places_piece!(brd, current_player, scoreboard)
+    player_places_piece!(brd, current_player, player_markers)
   end
 end
 
-def player_places_piece!(brd, current_player, scoreboard)
+def player_places_piece!(brd, current_player, player_markers)
   move = ask_player_move(brd)
 
-  if move == 'help'
+  if %w(h help).include?(move)
     toggle_help!(brd)
   else
-    brd[move] = scoreboard[current_player][:marker]
+    brd[move.to_i] = player_markers[current_player]
   end
 end
 
@@ -404,19 +373,15 @@ def ask_player_move(brd)
     prompt "Choose a square (#{joinor(empty_squares(brd))}) " \
            "or type 'help' for help:"
     move = gets.chomp.downcase
-
-    if %w(h help).include?(move)
-      return 'help'
-    elsif valid_number_string?(move) && empty_squares(brd).include?(move.to_i)
-      return move.to_i
-    end
+    return move if empty_squares(brd).include?(move.to_i) ||
+                   %w(h help).include?(move)
 
     prompt 'invalid_player_choice'
   end
 end
 
-def computer_places_piece!(brd, current_player, scoreboard)
-  display_computer_loading("#{scoreboard[current_player][:name]} is choosing", 0.2)
+def computer_places_piece!(brd, current_player, player_markers)
+  display_computer_loading("#{current_player} is choosing", 0.2)
 
   # prioritize offensive winning move when possible
   move = find_offensive_move(brd)
@@ -430,7 +395,7 @@ def computer_places_piece!(brd, current_player, scoreboard)
   # otherwise pick random square if no preceding move available
   move = empty_squares(brd).sample if !move
 
-  brd[move] = scoreboard[current_player][:marker]
+  brd[move] = player_markers[current_player]
 end
 
 def find_offensive_move(brd)
@@ -530,25 +495,47 @@ end
 # ------------------------------------------------------------
 
 # start of game
-# display_welcome
+display_welcome
+display_preloading_sequence
 
 # main game loop
 loop do
-  settings = configure_settings
-  players = initialize_players
+  players, player_markers = initialize_players_and_markers
   scoreboard = initialize_scoreboard(players)
   first_player = ask_first_player(players)
   ask_rules
   ask_player_ready
 
-  play_game(settings)
   # round loop
   loop do
-    play_round(first_player, scoreboard)
+    current_player = first_player
+    board = initialize_board
+
+    # player turn loop
+    loop do
+      display_game(scoreboard, board)
+      display_current_player(current_player)
+      place_piece!(board, current_player, player_markers)
+
+      if board[:help]
+        display_rules
+        ask_player_ready
+        toggle_help!(board)
+        next
+      end
+
+      break if round_winner?(board) || board_full?(board)
+
+      current_player = alternate_player(current_player, players)
+    end
+
+    update_score!(scoreboard, board)
+    display_game(scoreboard, board)
+    display_round_result(scoreboard, board)
 
     break if final_winner?(scoreboard)
 
-    first_player = alternate_player(first_player)
+    first_player = alternate_player(first_player, players)
     update_round!(scoreboard)
   end
 
