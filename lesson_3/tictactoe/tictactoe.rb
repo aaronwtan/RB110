@@ -6,7 +6,8 @@ PRELOADING_MESSAGE_KEYS = Array.new(9) { |i| "loading#{i}" }
 
 DEFAULT_SETTINGS = { players: ['Player', 'Computer'],
                      first_player: :player1,
-                     final_win_condition: 5 }
+                     final_win_condition: 5,
+                     first_game: false }
 
 COMPUTER_PLAYERS = ['computer', 'computer 1', 'computer 2']
 
@@ -116,12 +117,10 @@ def format_footer(length)
 end
 
 # game and settings methods
-def play_game(settings)
-  players = settings[:players]
+def play_game(settings=DEFAULT_SETTINGS)
   first_player = settings[:first_player]
-  scoreboard = initialize_scoreboard(players, settings[:final_win_condition])
-
-  ask_rules
+  scoreboard = initialize_scoreboard(settings[:players],
+                                     settings[:final_win_condition])
   ask_player_ready
 
   # round loop
@@ -137,16 +136,56 @@ def play_game(settings)
   display_final_result(scoreboard)
 end
 
+def initialize_settings
+  settings = DEFAULT_SETTINGS
+  settings[:first_game] = true
+  settings
+end
+
+def ask_settings(settings)
+  system 'clear'
+  if settings[:first_game]
+    settings[:first_game] = false
+    ask_default_settings
+  else
+    prompt 'ask_change_settings'
+    if answered_yes?
+      ask_default_settings
+    else
+      prompt 'same_settings'
+      sleep(2)
+      settings
+    end
+  end
+end
+
+def ask_default_settings
+  system 'clear'
+  prompt 'ask_default_settings'
+  if answered_yes?
+    prompt 'default_game'
+    sleep(3)
+    ask_rules
+    configure_settings(default: true)
+  else
+    prompt 'configure_settings'
+    sleep(3)
+    configure_settings
+  end
+end
+
 def configure_settings(default: false)
   return DEFAULT_SETTINGS if default
 
   players = initialize_players
   first_player = ask_first_player(players)
   final_win_condition = ask_final_win_condition
+  ask_rules
 
   { players: players,
     first_player: first_player,
-    final_win_condition: final_win_condition }
+    final_win_condition: final_win_condition,
+    first_game: false }
 end
 
 def initialize_players
@@ -181,6 +220,17 @@ def ask_player(player_number)
   human? ? ask_name : 'Computer'
 end
 
+def human?
+  loop do
+    answer = gets.chomp.downcase
+    if %w(h c human computer).include?(answer)
+      return %w(h human).include?(answer)
+    end
+
+    prompt 'invalid_human_or_computer'
+  end
+end
+
 def ask_name
   loop do
     prompt 'ask_human_name'
@@ -193,17 +243,6 @@ def ask_name
     else
       return name
     end
-  end
-end
-
-def human?
-  loop do
-    answer = gets.chomp.downcase
-    if ['h', 'c', 'human', 'computer'].include?(answer)
-      return ['h', 'human'].include?(answer)
-    end
-
-    prompt 'invalid_human_or_computer'
   end
 end
 
@@ -220,10 +259,10 @@ def ask_first_player(players)
          "(Press enter to let the computer decide.)"
 
   loop do
-    player = gets.chomp
-    first_player = determine_first_player(player, players)
+    choice = gets.chomp
+    first_player = determine_first_player(choice, players)
 
-    return first_player unless first_player.empty?
+    return first_player unless first_player.nil?
 
     prompt "Invalid choice. Please choose #{joinor(players)}. " \
            "Press enter to let the computer decide."
@@ -235,44 +274,35 @@ def determine_first_player(first_player_choice, players)
     first_player = first_player_choice
     prompt "You chose #{first_player} to go first! " \
            "Player who goes first will alternate between rounds."
+    sleep(3)
   elsif first_player_choice.empty?
     first_player = players.sample
     prompt "Computer chose #{first_player} to go first! " \
            "Player who goes first will alternate between rounds."
+    sleep(3)
   end
-
-  sleep(3)
 
   case first_player
   when players.first then :player1
   when players.last  then :player2
-  else                    first_player
   end
 end
 
-def display_rules(rules='y')
+def display_rules
   system 'clear'
-  if %w(y yes).include?(rules)
-    puts RULES
-    reference_board = initialize_board(show_references: true)
-    display_board(reference_board)
-  else
-    prompt 'no_rules'
-  end
+  puts RULES
+  reference_board = initialize_board(show_references: true)
+  display_board(reference_board)
 end
 
 def ask_rules
   system 'clear'
   prompt 'ask_rules'
 
-  loop do
-    answer = gets.chomp.downcase
-    if %w(y yes n no).include?(answer)
-      display_rules(answer)
-      break
-    end
-
-    prompt 'invalid_yes_or_no'
+  if answered_yes?
+    display_rules
+  else
+    prompt 'no_rules'
   end
 end
 
@@ -294,21 +324,13 @@ def play_round(first_player, scoreboard)
   current_player = first_player
   board = initialize_board
 
+  # player turn loop
   loop do
-    display_game(scoreboard, board)
-    display_current_player(current_player, scoreboard)
-    place_piece!(board, current_player, scoreboard)
-
-    if board[:help]
-      display_rules
-      ask_player_ready
-      toggle_help!(board)
-      next
-    end
+    play_turn(board, current_player, scoreboard)
 
     break if round_winner?(board) || board_full?(board)
 
-    current_player = alternate_player(current_player)
+    current_player = alternate_player(current_player) unless board[:help]
   end
 
   update_score!(scoreboard, board)
@@ -402,6 +424,10 @@ def display_board(brd)
 end
 # rubocop:enable Metrics/AbcSize
 
+def alternate_player(current_player)
+  current_player == :player1 ? :player2 : :player1
+end
+
 def update_round!(scoreboard)
   scoreboard[:round] += 1
 end
@@ -410,9 +436,19 @@ def update_score!(scoreboard, brd)
   scoreboard[detect_winner(brd)][:score] += 1 if round_winner?(brd)
 end
 
-# turn gameplay methods
-def alternate_player(current_player)
-  current_player == :player1 ? :player2 : :player1
+# player turn methods
+def play_turn(brd, current_player, scoreboard)
+  display_help(brd) if brd[:help]
+
+  display_game(scoreboard, brd)
+  display_current_player(current_player, scoreboard)
+  place_piece!(brd, current_player, scoreboard)
+end
+
+def display_help(brd)
+  toggle_help!(brd)
+  display_rules
+  ask_player_ready
 end
 
 def empty_squares(brd)
@@ -454,13 +490,14 @@ def ask_player_move(brd)
 end
 
 def computer_places_piece!(brd, current_player, scoreboard)
-  display_computer_loading("#{scoreboard[current_player][:name]} is choosing", 0.2)
+  display_computer_loading("#{scoreboard[current_player][:name]} " \
+                           "is choosing", 0.2)
 
   # prioritize offensive winning move when possible
-  move = find_offensive_move(brd)
+  move = find_move(brd, current_player, scoreboard)
 
   # defense if no offensive move available
-  move = find_defensive_move(brd) if !move
+  move = find_move(brd, alternate_player(current_player), scoreboard) if !move
 
   # if no offensive or defensive moves and square #5 empty, pick square #5
   move = 5 if !move && brd[5] == EMPTY_MARKER
@@ -471,17 +508,9 @@ def computer_places_piece!(brd, current_player, scoreboard)
   brd[move] = scoreboard[current_player][:marker]
 end
 
-def find_offensive_move(brd)
+def find_move(brd, at_risk_player, scoreboard)
   WINNING_LINES.each do |line|
-    move = find_at_risk_square(line, brd, PLAYER2_MARKER)
-    return move unless move.nil?
-  end
-  nil
-end
-
-def find_defensive_move(brd)
-  WINNING_LINES.each do |line|
-    move = find_at_risk_square(line, brd, PLAYER1_MARKER)
+    move = find_at_risk_square(line, brd, scoreboard[at_risk_player][:marker])
     return move unless move.nil?
   end
   nil
@@ -513,14 +542,14 @@ def display_final_result(scoreboard)
   final_game_str = 'game'
   final_round_str = 'round'
 
-  pluralize_string(final_game_str) if final_win_condition > 1
-  pluralize_string(final_round_str) if final_round > 1
+  pluralize_string!(final_game_str) if final_win_condition > 1
+  pluralize_string!(final_round_str) if final_round > 1
 
   prompt "#{final_winner} won #{final_win_condition} #{final_game_str} " \
          "and is the final winner after #{final_round} #{final_round_str}!"
 end
 
-def pluralize_string(string)
+def pluralize_string!(string)
   string << 's'
 end
 
@@ -557,6 +586,10 @@ end
 
 def play_again?
   prompt 'play_again'
+  answered_yes?
+end
+
+def answered_yes?
   loop do
     answer = gets.chomp.downcase
     return %w(y yes).include?(answer) if %w(y yes n no).include?(answer)
@@ -568,11 +601,12 @@ end
 # ------------------------------------------------------------
 
 # start of game
-# display_welcome
+display_welcome
+settings = initialize_settings
 
 # main game loop
 loop do
-  settings = configure_settings(default: true)
+  settings = ask_settings(settings)
   play_game(settings)
 
   break unless play_again?
