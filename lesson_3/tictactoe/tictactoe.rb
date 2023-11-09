@@ -1,5 +1,4 @@
 require 'yaml'
-require 'pry'
 
 MESSAGES = YAML.load_file('tictactoe.yml')
 PRELOADING_MESSAGE_KEYS = Array.new(9) { |i| "loading#{i}" }
