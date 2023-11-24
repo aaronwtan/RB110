@@ -37,8 +37,10 @@ def shuffle!(deck)
 end
 
 def deal_cards(deck)
-  player_cards = deck.pop
-  dealer_cards = deck.pop
+  player_cards = [deck.pop]
+  dealer_cards = [deck.pop]
+  player_cards << deck.pop
+  dealer_cards << deck.pop
 
   [player_cards, dealer_cards]
 end
@@ -63,12 +65,11 @@ end
 
 # 1. Initialize deck
 deck = initialize_deck
-binding.pry
 
 # deck -> stack-like data structure represented by 2D nested-array
 
 # 2. Deal cards to player and dealer
-# player_cards, dealer_cards = deal_cards(deck)
+player_cards, dealer_cards = deal_cards(deck)
 
 # # 3. Player turn: hit or stay
 # #   - repeat until bust or "stay"
