@@ -33,34 +33,27 @@ def play_game
   # 2. Deal cards to player and dealer
   cards = deal_cards(deck)
 
-  # # 3. Player turn: hit or stay
+  # 3. Player turn: hit or stay
   # #   - repeat until bust or "stay"
   play_player_turn(cards, deck)
 
   # 4. If player bust, dealer wins.
-  if busted?(cards[:player])
-    prompt 'player_bust'
-    sleep(2)
-    return
-  else
-    prompt 'stay'
-  end
+  #    Otherwise continue to dealer's turn
+  return if someone_busted?(cards, :player)
 
-  # # 5. Dealer turn: hit or stay
+  # 5. Dealer turn: hit or stay
   # #   - repeat until total >= 17
   play_dealer_turn(cards, deck)
 
-  # # 6. If dealer bust, player wins.
-  display_game(cards)
-  return if busted?(cards[:dealer])
+  # 6. If dealer bust, player wins.
+  #    Otherwise continue to compare cards
+  return if someone_busted?(cards, :dealer)
 
   # # 7. Compare cards and declare winner.
-  winner = determine_winner(cards)
-  display_result(winner)
-  prompt "The winner is #{winner}!"
+  display_result(cards)
 end
 
-def display_game(cards)
+def display_game(cards, msg_key=nil)
   display_title
 
   puts "DEALER SCORE: #{calculate_total_value(cards[:dealer])}"
@@ -70,20 +63,23 @@ def display_game(cards)
   puts "PLAYER SCORE: #{calculate_total_value(cards[:player])}"
   display_cards(cards[:player])
   puts ''
+
+  unless msg_key.nil?
+    prompt msg_key
+    sleep(1.5)
+  end
 end
 
 # player_methods
 def play_player_turn(cards, deck)
-  display_game(cards)
-
   loop do
+    display_game(cards)
     choice = ask_hit_or_stay
 
     return if %w(s stay).include?(choice)
 
-    prompt 'hit'
     cards[:player] << deck.pop
-    display_game(cards)
+    display_game(cards, 'hit')
 
     return if busted?(cards[:player])
   end
@@ -105,8 +101,7 @@ end
 def play_dealer_turn(cards, deck)
   while calculate_total_value(cards[:dealer]) < 17
     cards[:dealer] << deck.pop
-    display_game(cards)
-    sleep(2)
+    display_game(cards, 'dealer_hits')
   end
 end
 
@@ -166,30 +161,55 @@ def calculate_total_value(cards)
   total
 end
 
-def busted?(cards)
-  calculate_total_value(cards) > 21
+def someone_busted?(cards, player)
+  if busted?(cards[player])
+    display_result(cards)
+  elsif player == :player
+    display_game(cards, 'stay')
+  elsif player == :dealer
+    display_game(cards, 'dealer_stays')
+  end
+
+  busted?(cards[player])
+end
+
+def busted?(player_cards)
+  calculate_total_value(player_cards) > 21
 end
 
 def determine_winner(cards)
   player_total = calculate_total_value(cards[:player])
   dealer_total = calculate_total_value(cards[:dealer])
 
-  if busted?(cards[:player]) || dealer_total > player_total
-    'Dealer'
-  elsif busted?(cards[:dealer]) || player_total > dealer_total
-    'Player'
+  if busted?(cards[:player])
+    :player_bust
+  elsif busted?(cards[:dealer])
+    :dealer_bust
+  elsif player_total > dealer_total
+    :player
+  elsif dealer_total > player_total
+    :dealer
+  else
+    :tie
   end
 end
 
 # result methods
-def display_result(winner=nil)
-  case winner
-  when 'Player'
-    prompt "Player wins!"
-  when 'Dealer'
-    prompt "Dealer wins!"
-  else
-    prompt "Push!"
+def display_result(cards)
+  display_game(cards)
+  result = determine_winner(cards)
+
+  case result
+  when :player_bust
+    prompt 'player_bust'
+  when :dealer_bust
+    prompt 'dealer_bust'
+  when :player
+    prompt 'player_wins'
+  when :dealer
+    prompt 'dealer_wins'
+  when :tie
+    prompt 'tie'
   end
 
   sleep(2)
