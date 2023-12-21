@@ -6,6 +6,15 @@ MESSAGES = YAML.load_file('twentyone.yml')
 CARD_RANKS = ('2'..'10').to_a + ['J', 'Q', 'K', 'A']
 SUITS = ['D', 'C', 'H', 'S']
 
+SUIT_SYMBOLS = ["\u2666", "\u2663", "\u2665", "\u2660"].map do |unicode|
+  unicode.encode('utf-8')
+end
+
+SUIT_TO_SYMBOL = SUITS.zip(SUIT_SYMBOLS).to_h
+
+BUST_CONDITION = 21
+DEALER_STAY_CONDITION = 17
+
 # formatting methods
 def prompt(msg)
   if MESSAGES.keys.include?(msg)
@@ -13,6 +22,11 @@ def prompt(msg)
   else
     puts ">> #{msg}"
   end
+end
+
+def display_welcome
+  display_title('Welcome to Twenty-One!')
+  sleep(2)
 end
 
 def display_title(title="TWENTY-ONE")
@@ -25,43 +39,51 @@ def display_title(title="TWENTY-ONE")
   puts ''
 end
 
+def convert_unicode(unicode)
+  unicode.encode('utf-8')
+end
+
 # game methods
 def play_game
   # 1. Initialize deck
   deck = initialize_deck
 
   # 2. Deal cards to player and dealer
-  cards = deal_cards(deck)
+  player, dealer = initialize_players(deck)
 
   # 3. Player turn: hit or stay
-  # #   - repeat until bust or "stay"
-  play_player_turn(cards, deck)
+  #    - repeat until bust or stay
+  play_player_turn(player, dealer, deck)
 
   # 4. If player bust, dealer wins.
-  #    Otherwise continue to dealer's turn
-  return if someone_busted?(cards, :player)
+  #    - Otherwise continue to dealer's turn
+  return display_result(player, dealer) if busted?(player[:total])
+
+  display_game(player, dealer, 'stay')
 
   # 5. Dealer turn: hit or stay
-  # #   - repeat until total >= 17
-  play_dealer_turn(cards, deck)
+  #     - repeat until total >= 17
+  play_dealer_turn(player, dealer, deck)
 
   # 6. If dealer bust, player wins.
-  #    Otherwise continue to compare cards
-  return if someone_busted?(cards, :dealer)
+  #    - Otherwise continue to compare cards
+  return display_result(player, dealer) if busted?(dealer[:total])
+
+  display_game(player, dealer, 'dealer_stays')
 
   # # 7. Compare cards and declare winner.
-  display_result(cards)
+  display_result(player, dealer)
 end
 
-def display_game(cards, msg_key=nil)
+def display_game(player, dealer, msg_key=nil)
   display_title
 
-  puts "DEALER SCORE: #{calculate_total_value(cards[:dealer])}"
-  display_cards(cards[:dealer])
+  puts "DEALER SCORE: #{dealer[:total]}"
+  display_cards(dealer[:cards])
   puts ''
 
-  puts "PLAYER SCORE: #{calculate_total_value(cards[:player])}"
-  display_cards(cards[:player])
+  puts "PLAYER SCORE: #{player[:total]}"
+  display_cards(player[:cards])
   puts ''
 
   unless msg_key.nil?
@@ -70,18 +92,30 @@ def display_game(cards, msg_key=nil)
   end
 end
 
+def initialize_players(deck)
+  player_cards, dealer_cards = deal_cards(deck)
+  player_total = calculate_total(player_cards)
+  dealer_total = calculate_total(dealer_cards)
+
+  player = { cards: player_cards, total: player_total }
+  dealer = { cards: dealer_cards, total: dealer_total }
+
+  [player, dealer]
+end
+
 # player_methods
-def play_player_turn(cards, deck)
+def play_player_turn(player, dealer, deck)
   loop do
-    display_game(cards)
+    display_game(player, dealer)
     choice = ask_hit_or_stay
 
-    return if %w(s stay).include?(choice)
+    if %w(h hit).include?(choice)
+      player[:cards] << deck.pop
+      player[:total] = calculate_total(player[:cards])
+      display_game(player, dealer, 'hit')
+    end
 
-    cards[:player] << deck.pop
-    display_game(cards, 'hit')
-
-    return if busted?(cards[:player])
+    return if %w(s stay).include?(choice) || busted?(player[:total])
   end
 end
 
@@ -98,10 +132,11 @@ def ask_hit_or_stay
 end
 
 # dealer_methods
-def play_dealer_turn(cards, deck)
-  while calculate_total_value(cards[:dealer]) < 17
-    cards[:dealer] << deck.pop
-    display_game(cards, 'dealer_hits')
+def play_dealer_turn(player, dealer, deck)
+  while dealer[:total] < DEALER_STAY_CONDITION
+    dealer[:cards] << deck.pop
+    dealer[:total] = calculate_total(dealer[:cards])
+    display_game(player, dealer, 'dealer_hits')
   end
 end
 
@@ -133,15 +168,47 @@ def deal_cards(deck)
     dealer_cards << deck.pop
   end
 
-  { player: player_cards, dealer: dealer_cards }
+  [player_cards, dealer_cards]
 end
 
 def display_cards(cards)
-  p cards
+  number_of_cards = cards.size
+
+  top_bottom_lines = "+-----+" * number_of_cards
+  upper_rank_lines = ''
+  suit_lines = ''
+  lower_rank_lines = ''
+
+  cards.each do |rank, suit|
+    upper_rank_lines << format_rank_line(rank, 'upper')
+    suit_lines << "|  #{SUIT_TO_SYMBOL[suit]}  |"
+    lower_rank_lines << format_rank_line(rank, 'lower')
+  end
+
+  puts top_bottom_lines
+  puts upper_rank_lines
+  puts suit_lines
+  puts lower_rank_lines
+  puts top_bottom_lines
+end
+
+def format_rank_line(rank, position)
+  case position
+  when 'upper'
+    case rank.length
+    when 1 then "|#{rank}    |"
+    when 2 then "|#{rank}   |"
+    end
+  when 'lower'
+    case rank.length
+    when 1 then "|    #{rank}|"
+    when 2 then "|   #{rank}|"
+    end
+  end
 end
 
 # calculation methods
-def calculate_total_value(cards)
+def calculate_total(cards)
   ranks = cards.map(&:first)
 
   total = ranks.reduce(0) do |sum, rank|
@@ -154,40 +221,23 @@ def calculate_total_value(cards)
     end
   end
 
-  ranks.count('A').times do
-    total -= 10 if total > 21
-  end
+  ranks.count('A').times { total -= 10 if total > BUST_CONDITION }
 
   total
 end
 
-def someone_busted?(cards, player)
-  if busted?(cards[player])
-    display_result(cards)
-  elsif player == :player
-    display_game(cards, 'stay')
-  elsif player == :dealer
-    display_game(cards, 'dealer_stays')
-  end
-
-  busted?(cards[player])
+def busted?(total)
+  total > BUST_CONDITION
 end
 
-def busted?(player_cards)
-  calculate_total_value(player_cards) > 21
-end
-
-def determine_winner(cards)
-  player_total = calculate_total_value(cards[:player])
-  dealer_total = calculate_total_value(cards[:dealer])
-
-  if busted?(cards[:player])
+def determine_winner(player, dealer)
+  if busted?(player[:total])
     :player_bust
-  elsif busted?(cards[:dealer])
+  elsif busted?(dealer[:total])
     :dealer_bust
-  elsif player_total > dealer_total
+  elsif player[:total] > dealer[:total]
     :player
-  elsif dealer_total > player_total
+  elsif dealer[:total] > player[:total]
     :dealer
   else
     :tie
@@ -195,9 +245,9 @@ def determine_winner(cards)
 end
 
 # result methods
-def display_result(cards)
-  display_game(cards)
-  result = determine_winner(cards)
+def display_result(player, dealer)
+  display_game(player, dealer)
+  result = determine_winner(player, dealer)
 
   case result
   when :player_bust
@@ -231,6 +281,7 @@ def answered_yes?
 end
 
 # -----------------------------------------------------------------------------
+display_welcome
 
 loop do
   play_game
