@@ -14,6 +14,46 @@ SUIT_TO_SYMBOL = SUITS.zip(SUIT_SYMBOLS).to_h
 
 BUST_CONDITION = 21
 DEALER_STAY_CONDITION = 17
+DEFAULT_WINS = 5
+
+RULES_PT1 = <<-MSG
+---------- RULES ----------
+=> OBJECTIVE:
+=> The goal of Twenty-One is to try to get as close to 21 as possible,
+=> without going over. If you go over 21, it's a "bust" and an
+=> immediate loss.
+
+=> SETUP:
+=> The game consists of a "dealer" and a "player". Both participants
+=> are initially dealt 2 cards. The player can see both their cards,
+=> but can initially see only the first of the dealer's cards,
+=> with the second card (the "hole" card) hidden from the player.
+
+=> CARD VALUES:
+=> Card numbers 2-10 are worth their face value. Jacks, queens,
+=> and kings are each worth 10. Aces are worth either 1 or 11,
+=> depending on the player's hand: an ace is counted as 11 if
+=> it does not cause the hand's value to exceed 21; otherwise,
+=> it is counted as 1.
+
+MSG
+
+RULES_PT2 = <<-MSG
+---------- RULES ----------
+=> GAMEPLAY:
+=> The player goes first and can choose to "hit" to add more cards
+=> to their hand, or "stay" to keep their current hand. If their
+=> hand's total exceeds 21, the player busts and loses.
+
+=> If the player stays without busting, the dealer's turn begins.
+=> The dealer must hit until their total hand is at least 17, at which
+=> point they must stay. If the dealer busts, the player wins.
+
+=> If both the player and dealer stay without busting, then the total value
+=> of each hand is compared and the winner is the one with the highest
+=> value. If the values are the same, it's a tie, resulting in a "push".
+
+MSG
 
 # formatting methods
 def prompt(msg)
@@ -39,22 +79,25 @@ def display_title(title="TWENTY-ONE")
   puts ''
 end
 
+def format_header(msg)
+  "-----#{msg}-----"
+end
+
+def format_footer(length)
+  '-' * length
+end
+
 def convert_unicode(unicode)
   unicode.encode('utf-8')
 end
 
-# game methods
-def play_game
-  scoreboard = initialize_scoreboard
+# settings methods
+def configure_settings
+  final_win_condition = ask_final_win_condition
+  players = [:player, :dealer]
+  ask_rules
 
-  loop do
-    player, dealer = play_round(scoreboard)
-    display_round_result(player, dealer, scoreboard)
-    if final_winner?(scoreboard)
-      display_final_result(scoreboard)
-      return
-    end
-  end
+  { players: players, final_win_condition: final_win_condition }
 end
 
 def ask_final_win_condition
@@ -67,7 +110,7 @@ def ask_final_win_condition
     if final_win_condition.empty?
       prompt 'default_win_condition'
       sleep(2)
-      return 5
+      return DEFAULT_WINS
     elsif valid_number_string?(final_win_condition, '+')
       prompt "The first player to #{final_win_condition} will win the game."
       sleep(2)
@@ -83,6 +126,53 @@ def valid_number_string?(number_str, sign=nil)
   when '+' then number_str =~ /^\d+$/ && number_str.to_i.positive?
   when '-' then number_str =~ /^\d+$/ && number_str.to_i.negative?
   else          number_str =~ /^\d+$/
+  end
+end
+
+def ask_rules
+  system 'clear'
+  prompt 'ask_rules'
+
+  display_rules if answered_yes?
+end
+
+def display_rules
+  loop do
+    system 'clear'
+    puts RULES_PT1
+    ask_player_ready
+
+    system 'clear'
+    puts RULES_PT2
+
+    prompt 'ask_rules_again'
+
+    return unless answered_yes?
+  end
+end
+
+def ask_player_ready
+  prompt 'ready'
+  gets
+end
+
+# game methods
+def play_game(settings)
+  system 'clear'
+  prompt 'begin_game'
+  ask_player_ready
+  scoreboard = initialize_scoreboard(settings[:players],
+                                     settings[:final_win_condition])
+
+  loop do
+    player, dealer = play_round(scoreboard)
+    display_round_result(player, dealer, scoreboard)
+    if final_winner?(scoreboard)
+      display_final_result(scoreboard)
+      return
+    end
+
+    update_round!(scoreboard)
   end
 end
 
@@ -120,6 +210,7 @@ end
 def display_game(player, dealer, scoreboard, msg_key=nil)
   display_title
   display_score(scoreboard)
+  display_final_win_condition(scoreboard[:final_win_condition])
 
   if dealer[:hole_card_hidden]
     puts "DEALER TOTAL: ?"
@@ -138,15 +229,25 @@ def display_game(player, dealer, scoreboard, msg_key=nil)
   end
 end
 
-def initialize_scoreboard
-  { player: { score: 0 },
-    dealer: { score: 0 },
-    final_win_condition: ask_final_win_condition }
+def initialize_scoreboard(players, final_win_condition)
+  { players.first => { score: 0 },
+    players.last => { score: 0 },
+    :round => 1,
+    :final_win_condition => final_win_condition }
 end
 
 def display_score(scoreboard)
+  header = format_header("ROUND #{scoreboard[:round]}")
+  footer = format_footer(header.length)
+
+  puts header
   puts "Player Wins: #{scoreboard[:player][:score]}"
   puts "Dealer Wins: #{scoreboard[:dealer][:score]}"
+  puts footer
+end
+
+def display_final_win_condition(final_win_condition)
+  puts "First to #{final_win_condition} wins!"
   puts ''
 end
 
@@ -360,13 +461,17 @@ end
 def display_final_result(scoreboard)
   final_win_condition = scoreboard[:final_win_condition]
   final_winner = determine_final_winner(scoreboard)
-  prompt "#{final_winner} is the first to #{final_win_condition} and is " \
+  prompt "#{final_winner} is the first to #{final_win_condition} and " \
          "the final winner of Twenty-One!"
   sleep(2)
 end
 
 def update_score!(scoreboard, winner)
   scoreboard[winner][:score] += 1
+end
+
+def update_round!(scoreboard)
+  scoreboard[:round] += 1
 end
 
 def play_again?
@@ -388,7 +493,8 @@ end
 display_welcome
 
 loop do
-  play_game
+  settings = configure_settings
+  play_game(settings)
 
   break unless play_again?
 end
