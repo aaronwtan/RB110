@@ -342,9 +342,9 @@ def display_cards(player)
   initial_card_suit = cards[0][1]
 
   top_bottom_lines = "+-----+" * cards.size
-  middle_lines = [format_rank_line(initial_card_rank, 'upper')]
-  middle_lines << "|  #{SUIT_TO_SYMBOL[initial_card_suit]}  |"
-  middle_lines << format_rank_line(initial_card_rank, 'lower')
+  middle_lines = [format_rank_line(initial_card_rank, 'upper'),
+                  "|  #{SUIT_TO_SYMBOL[initial_card_suit]}  |",
+                  format_rank_line(initial_card_rank, 'lower')]
 
   append_middle_lines(player, middle_lines)
 
