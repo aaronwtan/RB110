@@ -1,4 +1,4 @@
-require 'pry'
+# require 'pry'
 require 'yaml'
 
 MESSAGES = YAML.load_file('twentyone.yml')
@@ -210,18 +210,8 @@ end
 def display_game(player, dealer, scoreboard, msg_key=nil)
   display_title
   display_score(scoreboard)
-  display_final_win_condition(scoreboard[:final_win_condition])
-
-  if dealer[:hole_card_hidden]
-    puts "DEALER TOTAL: ?"
-    display_cards_with_hidden_hole(dealer[:cards])
-  else
-    puts "DEALER TOTAL: #{dealer[:total]}"
-    display_cards(dealer[:cards])
-  end
-
-  puts "PLAYER TOTAL: #{player[:total]}"
-  display_cards(player[:cards])
+  display_info(dealer)
+  display_info(player)
 
   unless msg_key.nil?
     prompt msg_key
@@ -244,11 +234,20 @@ def display_score(scoreboard)
   puts "Player Wins: #{scoreboard[:player][:score]}"
   puts "Dealer Wins: #{scoreboard[:dealer][:score]}"
   puts footer
+  puts "First to #{scoreboard[:final_win_condition]} wins!"
+  puts ''
 end
 
-def display_final_win_condition(final_win_condition)
-  puts "First to #{final_win_condition} wins!"
-  puts ''
+def display_info(player)
+  if player[:hole_hidden].nil?
+    puts "PLAYER TOTAL: #{player[:total]}"
+  elsif player[:hole_hidden]
+    puts "DEALER TOTAL: ?"
+  else
+    puts "DEALER TOTAL: #{player[:total]}"
+  end
+
+  display_cards(player)
 end
 
 def initialize_players(deck)
@@ -257,7 +256,7 @@ def initialize_players(deck)
   dealer_total = calculate_total(dealer_cards)
 
   player = { cards: player_cards, total: player_total }
-  dealer = { cards: dealer_cards, total: dealer_total, hole_card_hidden: true }
+  dealer = { cards: dealer_cards, total: dealer_total, hole_hidden: true }
 
   [player, dealer]
 end
@@ -303,7 +302,7 @@ def play_dealer_turn(player, dealer, deck, scoreboard)
 end
 
 def reveal_hole_card!(dealer)
-  dealer[:hole_card_hidden] = false
+  dealer[:hole_hidden] = false
 end
 
 # deck methods
@@ -337,41 +336,38 @@ def deal_cards(deck)
   [player_cards, dealer_cards]
 end
 
-def display_cards(cards)
-  top_bottom_lines = "+-----+" * cards.size
-  upper_rank_lines = ''
-  suit_lines = ''
-  lower_rank_lines = ''
+def display_cards(player)
+  cards = player[:cards]
+  initial_card_rank = cards[0][0]
+  initial_card_suit = cards[0][1]
 
-  cards.each do |rank, suit|
-    upper_rank_lines << format_rank_line(rank, 'upper')
-    suit_lines << "|  #{SUIT_TO_SYMBOL[suit]}  |"
-    lower_rank_lines << format_rank_line(rank, 'lower')
-  end
+  top_bottom_lines = "+-----+" * cards.size
+  middle_lines = [format_rank_line(initial_card_rank, 'upper')]
+  middle_lines << "|  #{SUIT_TO_SYMBOL[initial_card_suit]}  |"
+  middle_lines << format_rank_line(initial_card_rank, 'lower')
+
+  append_middle_lines(player, middle_lines)
 
   puts top_bottom_lines
-  puts upper_rank_lines
-  puts suit_lines
-  puts lower_rank_lines
+  puts middle_lines
   puts top_bottom_lines
   puts ''
 end
 
-def display_cards_with_hidden_hole(cards)
-  shown_card_rank = cards.first.first
-  shown_card_suit = cards.first.last
+def append_middle_lines(player, middle_lines)
+  upper_rank_lines = middle_lines[0]
+  suit_lines = middle_lines[1]
+  lower_rank_lines = middle_lines[2]
 
-  top_bottom_lines = "+-----+" * cards.size
-  upper_rank_lines = "#{format_rank_line(shown_card_rank, 'upper')}|*****|"
-  suit_lines = "|  #{SUIT_TO_SYMBOL[shown_card_suit]}  ||*****|"
-  lower_rank_lines = "#{format_rank_line(shown_card_rank, 'lower')}|*****|"
-
-  puts top_bottom_lines
-  puts upper_rank_lines
-  puts suit_lines
-  puts lower_rank_lines
-  puts top_bottom_lines
-  puts ''
+  player[:cards][1..-1].each do |rank, suit|
+    if player[:hole_hidden]
+      middle_lines.each { |lines| lines << "|*****|" }
+    else
+      upper_rank_lines << format_rank_line(rank, 'upper')
+      suit_lines << "|  #{SUIT_TO_SYMBOL[suit]}  |"
+      lower_rank_lines << format_rank_line(rank, 'lower')
+    end
+  end
 end
 
 def format_rank_line(rank, position)
