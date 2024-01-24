@@ -1,4 +1,4 @@
-# require 'pry'
+require 'pry'
 require 'yaml'
 
 MESSAGES = YAML.load_file('twentyone.yml')
@@ -168,7 +168,7 @@ def play_game(settings)
     player, dealer = play_round(scoreboard)
     display_round_result(player, dealer, scoreboard)
     if final_winner?(scoreboard)
-      display_final_result(scoreboard)
+      display_final_result(player, dealer, scoreboard)
       return
     end
 
@@ -177,33 +177,19 @@ def play_game(settings)
 end
 
 def play_round(scoreboard)
-  # 1. Initialize deck
   deck = initialize_deck
-
-  # 2. Deal cards to player and dealer
   player, dealer = initialize_players(deck)
 
-  # 3. Player turn: hit or stay
-  #    - repeat until bust or stay
   play_player_turn(player, dealer, deck, scoreboard)
-
-  # 4. If player bust, dealer wins.
-  #    - Otherwise continue to dealer's turn
   return [player, dealer] if busted?(player[:total])
 
   display_game(player, dealer, scoreboard, 'stay')
 
-  # 5. Dealer turn: hit or stay
-  #     - repeat until total >= 17
   play_dealer_turn(player, dealer, deck, scoreboard)
-
-  # 6. If dealer bust, player wins.
-  #    - Otherwise continue to compare cards
   return [player, dealer] if busted?(dealer[:total])
 
   display_game(player, dealer, scoreboard, 'dealer_stays')
 
-  # # 7. Compare cards and declare winner.
   [player, dealer]
 end
 
@@ -310,7 +296,7 @@ def initialize_deck
   deck = []
 
   CARD_RANKS.each do |rank|
-    SUITS.each { |suit| deck << [rank, suit] }
+    SUITS.each { |suit| deck << { rank: rank, suit: suit } }
   end
 
   shuffle!(deck)
@@ -338,13 +324,13 @@ end
 
 def display_cards(player)
   cards = player[:cards]
-  initial_card_rank = cards[0][0]
-  initial_card_suit = cards[0][1]
+  first_card_rank = cards.first[:rank]
+  first_card_suit = cards.first[:suit]
 
   top_bottom_lines = "+-----+" * cards.size
-  middle_lines = [format_rank_line(initial_card_rank, 'upper'),
-                  "|  #{SUIT_TO_SYMBOL[initial_card_suit]}  |",
-                  format_rank_line(initial_card_rank, 'lower')]
+  middle_lines = [format_rank_line(first_card_rank, 'upper'),
+                  format_suit_line(first_card_suit),
+                  format_rank_line(first_card_rank, 'lower')]
 
   append_middle_lines(player, middle_lines)
 
@@ -355,39 +341,34 @@ def display_cards(player)
 end
 
 def append_middle_lines(player, middle_lines)
-  upper_rank_lines = middle_lines[0]
-  suit_lines = middle_lines[1]
-  lower_rank_lines = middle_lines[2]
-
-  player[:cards][1..-1].each do |rank, suit|
+  player[:cards][1..-1].each do |card|
     if player[:hole_hidden]
-      middle_lines.each { |lines| lines << "|*****|" }
+      middle_lines.each { |line| line << "|*****|" }
     else
-      upper_rank_lines << format_rank_line(rank, 'upper')
-      suit_lines << "|  #{SUIT_TO_SYMBOL[suit]}  |"
-      lower_rank_lines << format_rank_line(rank, 'lower')
+      rank = card[:rank]
+      suit = card[:suit]
+
+      middle_lines[0] << format_rank_line(rank, 'upper')
+      middle_lines[1] << format_suit_line(suit)
+      middle_lines[2] << format_rank_line(rank, 'lower')
     end
   end
 end
 
 def format_rank_line(rank, position)
   case position
-  when 'upper'
-    case rank.length
-    when 1 then "|#{rank}    |"
-    when 2 then "|#{rank}   |"
-    end
-  when 'lower'
-    case rank.length
-    when 1 then "|    #{rank}|"
-    when 2 then "|   #{rank}|"
-    end
+  when 'upper' then "|#{rank.ljust(5)}|"
+  when 'lower' then "|#{rank.rjust(5)}|"
   end
+end
+
+def format_suit_line(suit)
+  "|  #{SUIT_TO_SYMBOL[suit]}  |"
 end
 
 # calculation methods
 def calculate_total(cards)
-  ranks = cards.map(&:first)
+  ranks = cards.map { |card| card[:rank] }
 
   total = ranks.reduce(0) do |sum, rank|
     if rank == 'A'
@@ -454,9 +435,11 @@ def determine_final_winner(scoreboard)
   end
 end
 
-def display_final_result(scoreboard)
+def display_final_result(player, dealer, scoreboard)
   final_win_condition = scoreboard[:final_win_condition]
   final_winner = determine_final_winner(scoreboard)
+
+  display_game(player, dealer, scoreboard)
   prompt "#{final_winner} is the first to #{final_win_condition} and " \
          "the final winner of Twenty-One!"
   sleep(2)

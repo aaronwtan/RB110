@@ -7,7 +7,7 @@
 'invalid_number': "That's not a valid number. Please enter a positive integer."
 'hit_or_stay': "(H) Hit  (S) Stay"
 'hit': "You hit!"
-'stay': "You chose to stay!"
+'stay': "You stay!"
 'reveal_hole_card': "Dealer reveals their hidden card..."
 'dealer_hits': "Dealer hits!"
 'dealer_stays': "Dealer stays!"
