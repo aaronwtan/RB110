@@ -29,34 +29,35 @@ A
 1. return "i cannot be less than 1" if i < 1
 2. init sentence array to empty array to hold result words to be joined later
 3. remove spaces from input
-4. iterate through chars of space-less input with index
-  4a. init value of sentence at current sentence index to the current char
-  4b. init current word index to current sentence index + i
-  4c. loop through space-less input chars until current word index exceeds input bounds
-    - append the char at the current word index to the value at the current sentence index of the sentence array
+4. iterate through indices of spaceless input, with each index corresponding to the position in the sentence output
+  4a. set word index to the current sentence index
+  4b. init word to an empty string to hold the word at the current sentence index
+  4c. loop until current word index exceeds input bounds
+    - append the char at the current word index of input to the word string
     - increment the current word index by i
+  4d. append word string to sentence array
 5. return the sentence array joined with spaces
 C
 =end
 
 def fragment(str, i)
-  return "i cannot be less than 1" if i < 1
+  return 'i cannot be less than 1' if i < 1
 
   sentence = []
   str = str.gsub(' ', '')
 
-  str.chars.each_with_index do |char, sentence_index|
+  0.upto(str.length - 1) do |sentence_index|
     word_index = sentence_index
+    word = ''
 
     while word_index < str.length
-      if sentence[sentence_index].nil?
-        sentence[sentence_index] = char
-      else
-        sentence[sentence_index] << str[word_index]
-      end
-
+      word << str[word_index]
       word_index += i
     end
+
+    # (sentence_index...str.length).step(i) { |word_index| word << str[word_index] }
+
+    sentence[sentence_index] = word
   end
 
   sentence.join(' ')
